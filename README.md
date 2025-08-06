@@ -1,64 +1,94 @@
-# 🧬 RNA-Diffusion: A Diffusion Model for Inverse Design of Single-Cell Gene Expression
+# 🧬 scIDiff: Single-cell Inverse Diffusion
 
-**RNA-Diffusion** is a generative framework for modeling, denoising, and inverse designing single-cell gene expression profiles using **score-based diffusion models**.
+**scIDiff** is a deep generative framework for modeling, denoising, and inverse-designing single-cell gene expression profiles using **score-based diffusion models**.
 
-This project extends the ideas from scGen, CPA, and RNA-Diffusion by introducing a **perturbation-aware, property-conditioned diffusion model** for single-cell transcriptomics.
+This project combines the strengths of **denoising diffusion probabilistic models (DDPMs)** with **perturbation-aware learning** to create a toolkit for perturbation prediction, trajectory simulation, and transcriptional phenotype design at single-cell resolution.
 
 ---
 
-## 🚀 Project Goals
+## 🎯 Purpose
 
-- **Denoise** and simulate scRNA-seq expression profiles using diffusion models
-- **Condition generation** on biological covariates (e.g., drug, timepoint, cell type)
-- Enable **inverse design** of gene expression: generate profiles that match desired phenotypes (e.g., marker up/down)
-- Bridge transcriptional signatures with **potential perturbations (e.g., drugs, TFs)**
+* Generate realistic single-cell expression profiles
+* Denoise scRNA-seq data with learned diffusion-based score functions
+* Predict gene expression changes across drug, CRISPR, or time-based perturbations
+* Inverse design: generate gene expression programs from desired cell-state phenotypes
+* Connect phenotypes to causal regulators (e.g., transcription factors, small molecules)
 
 ---
 
 ## 🧠 Background
 
-Single-cell perturbation datasets (like Perturb-seq) capture how gene programs change in response to stimuli. But modeling these changes remains hard due to:
+Single-cell technologies allow high-resolution interrogation of cellular response to perturbations. While models like **scGen** and **CPA** approximate these perturbations via latent space shifts, they struggle with nonlinearity and sparse data.
 
-- High dimensionality, sparsity, and noise
-- Nonlinear cell state transitions
-- Complex interactions between covariates (e.g., drug + cell type)
-
-We propose using **denoising diffusion probabilistic models (DDPMs)** to model the distribution of gene expression vectors and enable **conditional sampling** from desired outcomes.
+**scIDiff** leverages **score-based diffusion modeling** to better model the full gene expression manifold and perform controlled generation of transcriptional states.
 
 ---
 
-## 🧰 Methods Overview
+## 🧰 Core Components
 
-### 📊 Input
-- Gene expression matrix (cells × genes)
-- Metadata: perturbation, cell type, dose, timepoint
+### 🧬 Diffusion Model
 
-### 🌬️ Diffusion Model
-- **Forward process**: Add Gaussian or biologically-informed noise to gene expression
-- **Reverse process**: Train a neural network to denoise
-- **Conditioning**: Perturbation/cell-type embeddings steer the generation
-- **Guided sampling**: Inverse design via classifier-free guidance or Langevin dynamics
+* Forward noise process on gene expression vectors
+* Reverse denoising learned via neural networks (score function)
+* Score conditioning using biological covariates (e.g., drug, cell type)
 
----
+### 🎯 Inverse Design Engine
 
-## 🧪 Applications
+* Accepts target phenotypes (e.g., marker genes ↑ or ↓)
+* Performs guided generation toward those transcriptional profiles
 
-- **scRNA-seq denoising**
-- **Simulation of unseen perturbation outcomes**
-- **Perturbation-aware cell fate prediction**
-- **Inverse design of transcriptional phenotypes**
-- **Linking desired phenotypes to candidate TFs or small molecules**
+### 🧪 Integration Modules
+
+* SCENIC+ / TF-gene mapping
+* Drug–gene effect priors (e.g., LINCS, DrugBank)
+* Cell trajectory inference tools (e.g., scVelo)
 
 ---
 
 ## 📦 Code Structure
 
 ```bash
-RNA-Diffusion/
-├── data/                   # Preprocessed datasets (Perturb-seq, sciPlex, etc.)
-├── models/                 # Score-based diffusion networks
-├── conditioning/           # Embedding models for perturbation/cell covariates
-├── sampling/               # Classifier-free and guided sampling methods
-├── evaluation/             # Metrics, visualization, benchmarking
-├── notebooks/              # Demos and experiments
-└── README.md               # You are here
+scIDiff/
+├── data/               # Preprocessed datasets (Perturb-seq, sciPlex, etc.)
+├── models/             # Diffusion networks and conditioning modules
+├── training/           # Loss functions and optimization logic
+├── sampling/           # Guided / inverse sampling routines
+├── evaluation/         # Benchmarking and metrics
+├── integration/        # Links to SCENIC+, drug priors, etc.
+└── notebooks/          # Demos and experiments
+```
+
+---
+
+## 🗓️ Roadmap
+
+* ✅ **Prototype DDPM** for scRNA-seq denoising
+* 🚧 **Add perturbation conditioning** (CPA-style architecture)
+* 🚧 **Implement inverse design** from phenotype-level targets
+* 🔜 **Integrate TF/drug mapping** via SCENIC+ and knowledge graphs
+* 🔬 **Publish benchmark** and submit to **NeurIPS / ICLR**
+
+---
+
+## 📚 References
+
+* Lotfollahi et al. *scGen: Modeling single-cell perturbation response*, Nat. Methods (2019)
+* Hetzel et al. *CPA: Compositional Perturbation Autoencoder*, bioRxiv (2021)
+* Song et al. *Score-Based Generative Modeling through SDEs*, NeurIPS (2021)
+* RNA-Diffusion (2024). [*https://arxiv.org/abs/2403.11247*](https://arxiv.org/abs/2403.11247)
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome — open an issue to start a discussion. We're especially looking for help with:
+
+* TF/pathway-guided inverse modeling
+* Drug perturbation prior integration
+* Multimodal (RNA + ATAC) extensions
+
+---
+
+## 📜 License
+
+MIT License
