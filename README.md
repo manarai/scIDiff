@@ -40,11 +40,7 @@ Single-cell technologies allow high-resolution interrogation of cellular respons
 * Accepts target phenotypes (e.g., marker genes ↑ or ↓)
 * Performs guided generation toward those transcriptional profiles
 
-### 🧪 Integration Modules
 
-* SCENIC+ / TF-gene mapping
-* Drug–gene effect priors (e.g., LINCS, DrugBank)
-* Cell trajectory inference tools (e.g., scVelo)
 
 ---
 
@@ -82,10 +78,8 @@ Target Phenotype
 Sample x_T → x_0 (DDPM)
    ↓
 Generated Gene Expression
-   ↓
-↓ SCENIC+ / Drug Mapping
-   ↓
-TFs / Molecules → Validation
+
+
 ```
 
 ---
@@ -99,7 +93,6 @@ scIDiff/
 ├── training/           # Loss functions and optimization logic
 ├── sampling/           # Guided / inverse sampling routines
 ├── evaluation/         # Benchmarking and metrics
-├── integration/        # Links to SCENIC+, drug priors, etc.
 └── notebooks/          # Demos and experiments
 ```
 
