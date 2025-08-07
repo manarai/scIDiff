@@ -110,7 +110,6 @@ scIDiff/
 * ✅ **Prototype DDPM** for scRNA-seq denoising
 * 🚧 **Add perturbation conditioning** (CPA-style architecture)
 * 🚧 **Implement inverse design** from phenotype-level targets
-* 🔜 **Integrate TF/drug mapping** via SCENIC+ and knowledge graphs
 * 🔬 **Publish benchmark** and submit to **NeurIPS / ICLR**
 
 ---
@@ -130,7 +129,7 @@ Contributions are welcome — open an issue to start a discussion. We're especia
 
 * TF/pathway-guided inverse modeling
 * Drug perturbation prior integration
-* Multimodal (RNA + ATAC) extensions
+
 
 ---
 
