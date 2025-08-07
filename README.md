@@ -19,6 +19,33 @@ This project combines the strengths of **denoising diffusion probabilistic model
 * **Connect** phenotypes to causal regulators (e.g., transcription factors, small molecules)
 
 ---
+<img width="1248" height="832" alt="qf85pLqWpp5gmrEVcKxNa9" src="https://github.com/user-attachments/assets/bcc26046-2818-4dc7-940b-3386f5d1b239" />
+
+---
+
+## 🔬 Mathematical Framework
+
+Let $x_0 \in \mathbb{R}^d$ be the clean gene expression vector (e.g., log-normalized counts), and $x_t$ be its noisy version at diffusion step $t$.
+
+### Forward Process
+
+We apply Gaussian noise incrementally:
+$$q(x_t | x_{t-1}) = \mathcal{N}(x_t; \sqrt{1 - \beta_t}x_{t-1}, \beta_t I)$$
+with schedule $\\{\\beta_t\\}_{t=1}^T$.
+
+### Reverse Process (Learned)
+
+We learn a parameterized score model $\\nabla_{x_t} \\log p(x_t) \\approx s_\\theta(x_t, t, c)$, conditioned on covariates $c$ (e.g., drug, cell type, TF module).
+
+Sampling is done by solving the reverse SDE or ODE:
+$$dx = [f(x, t) - g(t)^2 \\nabla_x \\log p(x_t)]dt + g(t) d\\bar{w}$$
+
+### Inverse Design Objective
+
+Given a phenotype descriptor $y$ (e.g., "high IL2RA, low exhaustion"), we optimize sampling path to steer toward matching features:
+$$\\min_{x_0} \\mathcal{L}_{\\text{target}}(f(x_0), y) \\quad \\text{while} \\quad x_0 \\sim p_\\theta(x_0 | x_T)$$
+
+---
 
 ## 🧠 Background
 
@@ -34,7 +61,7 @@ Single-cell technologies allow high-resolution interrogation of cellular respons
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/scIDiff.git
+git clone https://github.com/manarai/scIDiff.git
 cd scIDiff
 
 # Install dependencies
@@ -101,30 +128,6 @@ designed_cells = designer.design(target_phenotype)
 * Comprehensive training utilities with early stopping and checkpointing
 * Biological constraint losses (sparsity, non-negativity, pathway consistency)
 * Support for multi-GPU training and mixed precision
-
----
-
-## 🔬 Mathematical Framework
-
-Let $x_0 \in \mathbb{R}^d$ be the clean gene expression vector (e.g., log-normalized counts), and $x_t$ be its noisy version at diffusion step $t$.
-
-### Forward Process
-
-We apply Gaussian noise incrementally:
-$$q(x_t | x_{t-1}) = \mathcal{N}(x_t; \sqrt{1 - \beta_t}x_{t-1}, \beta_t I)$$
-with schedule $\\{\\beta_t\\}_{t=1}^T$.
-
-### Reverse Process (Learned)
-
-We learn a parameterized score model $\\nabla_{x_t} \\log p(x_t) \\approx s_\\theta(x_t, t, c)$, conditioned on covariates $c$ (e.g., drug, cell type, TF module).
-
-Sampling is done by solving the reverse SDE or ODE:
-$$dx = [f(x, t) - g(t)^2 \\nabla_x \\log p(x_t)]dt + g(t) d\\bar{w}$$
-
-### Inverse Design Objective
-
-Given a phenotype descriptor $y$ (e.g., "high IL2RA, low exhaustion"), we optimize sampling path to steer toward matching features:
-$$\\min_{x_0} \\mathcal{L}_{\\text{target}}(f(x_0), y) \\quad \\text{while} \\quad x_0 \\sim p_\\theta(x_0 | x_T)$$
 
 ---
 
@@ -406,7 +409,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ```bash
 # Clone and install in development mode
-git clone https://github.com/your-username/scIDiff.git
+git clone https://github.com/manarai/scIDiff.git
 cd scIDiff
 pip install -e ".[dev]"
 
