@@ -5,6 +5,11 @@
 This project combines the strengths of **denoising diffusion probabilistic models (DDPMs)** with **perturbation-aware learning** to create a toolkit for perturbation prediction, trajectory simulation, and transcriptional phenotype design at single-cell resolution.
 
 ---
+![ChatGPT Image Aug 7, 2025, 03_50_51 PM](https://github.com/user-attachments/assets/a78e1d8d-5dde-4c71-983d-ba512ff91ba6)
+<?xml version="1.0" encoding="utf-8"?><Error><Code>AuthenticationFailed</Code><Message>Server failed to authenticate the request. Make sure the value of Authorization header is formed correctly including the signature.
+RequestId:d682d054-301e-003f-55e5-07cabf000000
+Time:2025-08-07T21:50:51.9569588Z</Message><AuthenticationErrorDetail>Signed expiry time [Thu, 07 Aug 2025 00:21:38 GMT] must be after signed start time [Thu, 07 Aug 2025 21:50:51 GMT]</AuthenticationErrorDetail></Error>
+---
 
 ## 🎯 Purpose
 
