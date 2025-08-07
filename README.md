@@ -1,4 +1,4 @@
-# üß¨ scIDiff: Single-cell Inverse Diffusion
+# 🧬 scIDiff: Single-cell Inverse Diffusion
 
 **scIDiff** is a deep generative framework for modeling, denoising, and inverse-designing single-cell gene expression profiles using **score-based diffusion models**.
 
@@ -10,7 +10,7 @@ This project combines the strengths of **denoising diffusion probabilistic model
 
 ---
 
-## üéØ Purpose
+## 🎯 Purpose
 
 * **Generate** realistic single-cell expression profiles
 * **Denoise** scRNA-seq data with learned diffusion-based score functions
@@ -20,7 +20,7 @@ This project combines the strengths of **denoising diffusion probabilistic model
 
 ---
 
-## üß† Background
+## 🧠 Background
 
 Single-cell technologies allow high-resolution interrogation of cellular response to perturbations. While models like **scGen** and **CPA** approximate these perturbations via latent space shifts, they struggle with nonlinearity and sparse data.
 
@@ -28,7 +28,7 @@ Single-cell technologies allow high-resolution interrogation of cellular respons
 
 ---
 
-## üöÄ Quick Start
+## 🚀 Quick Start
 
 ### Installation
 
@@ -82,21 +82,21 @@ designed_cells = designer.design(target_phenotype)
 
 ---
 
-## üß∞ Core Components
+## 🧰 Core Components
 
-### üß¨ Diffusion Model
+### 🧬 Diffusion Model
 
 * **Forward noise process** on gene expression vectors
 * **Reverse denoising** learned via neural networks (score function)
 * **Score conditioning** using biological covariates (e.g., drug, cell type)
 
-### üéØ Inverse Design Engine
+### 🎯 Inverse Design Engine
 
-* Accepts target phenotypes (e.g., marker genes ‚Üë or ‚Üì)
+* Accepts target phenotypes (e.g., marker genes ↑ or ↓)
 * Performs guided generation toward those transcriptional profiles
 * Supports multiple objective functions and constraints
 
-### üî¨ Training Framework
+### 🔬 Training Framework
 
 * Comprehensive training utilities with early stopping and checkpointing
 * Biological constraint losses (sparsity, non-negativity, pathway consistency)
@@ -104,7 +104,7 @@ designed_cells = designer.design(target_phenotype)
 
 ---
 
-## üî¨ Mathematical Framework
+## 🔬 Mathematical Framework
 
 Let $x_0 \in \mathbb{R}^d$ be the clean gene expression vector (e.g., log-normalized counts), and $x_t$ be its noisy version at diffusion step $t$.
 
@@ -128,51 +128,51 @@ $$\\min_{x_0} \\mathcal{L}_{\\text{target}}(f(x_0), y) \\quad \\text{while} \\qu
 
 ---
 
-## üìä Framework Schematic
+## 📊 Framework Schematic
 
 ```
 Target Phenotype
-   ‚Üì
+   ↓
 [Inverse Guidance]
-   ‚Üì
-Sample x_T ‚Üí x_0 (DDPM)
-   ‚Üì
+   ↓
+Sample x_T → x_0 (DDPM)
+   ↓
 Generated Gene Expression
 ```
 
 ---
 
-## üì¶ Repository Structure
+## 📦 Repository Structure
 
 ```bash
 scIDiff/
-‚îú‚îÄ‚îÄ models/                 # Core model architectures
-‚îÇ   ‚îú‚îÄ‚îÄ __init__.py
-‚îÇ   ‚îú‚îÄ‚îÄ diffusion_model.py  # Main ScIDiff model
-‚îÇ   ‚îú‚îÄ‚îÄ score_network.py    # Score function neural network
-‚îÇ   ‚îú‚îÄ‚îÄ conditioning.py     # Biological conditioning modules
-‚îÇ   ‚îî‚îÄ‚îÄ noise_scheduler.py  # Noise scheduling strategies
-‚îú‚îÄ‚îÄ training/               # Training utilities and loss functions
-‚îÇ   ‚îú‚îÄ‚îÄ __init__.py
-‚îÇ   ‚îú‚îÄ‚îÄ trainer.py          # Main training loop
-‚îÇ   ‚îú‚îÄ‚îÄ losses.py           # Loss functions
-‚îÇ   ‚îî‚îÄ‚îÄ utils.py            # Training utilities
-‚îú‚îÄ‚îÄ sampling/               # Sampling and inverse design
-‚îÇ   ‚îú‚îÄ‚îÄ __init__.py
-‚îÇ   ‚îú‚îÄ‚îÄ sampler.py          # Basic sampling utilities
-‚îÇ   ‚îú‚îÄ‚îÄ inverse_design.py   # Inverse design engine
-‚îÇ   ‚îî‚îÄ‚îÄ guided_sampling.py  # Guided sampling methods
-‚îú‚îÄ‚îÄ evaluation/             # Evaluation metrics and benchmarks
-‚îú‚îÄ‚îÄ data/                   # Data loading and preprocessing
-‚îú‚îÄ‚îÄ notebooks/              # Example notebooks and tutorials
-‚îú‚îÄ‚îÄ tests/                  # Unit tests
-‚îú‚îÄ‚îÄ configs/                # Configuration files
-‚îî‚îÄ‚îÄ requirements.txt        # Dependencies
+├── models/                 # Core model architectures
+│   ├── __init__.py
+│   ├── diffusion_model.py  # Main ScIDiff model
+│   ├── score_network.py    # Score function neural network
+│   ├── conditioning.py     # Biological conditioning modules
+│   └── noise_scheduler.py  # Noise scheduling strategies
+├── training/               # Training utilities and loss functions
+│   ├── __init__.py
+│   ├── trainer.py          # Main training loop
+│   ├── losses.py           # Loss functions
+│   └── utils.py            # Training utilities
+├── sampling/               # Sampling and inverse design
+│   ├── __init__.py
+│   ├── sampler.py          # Basic sampling utilities
+│   ├── inverse_design.py   # Inverse design engine
+│   └── guided_sampling.py  # Guided sampling methods
+├── evaluation/             # Evaluation metrics and benchmarks
+├── data/                   # Data loading and preprocessing
+├── notebooks/              # Example notebooks and tutorials
+├── tests/                  # Unit tests
+├── configs/                # Configuration files
+└── requirements.txt        # Dependencies
 ```
 
 ---
 
-## üìö Examples and Tutorials
+## 📚 Examples and Tutorials
 
 ### 1. Basic Training
 
@@ -239,7 +239,7 @@ perturbed_cells = model.sample(
 
 ---
 
-## üîß Configuration
+## 🔧 Configuration
 
 scIDiff uses YAML configuration files for easy experiment management:
 
@@ -266,7 +266,7 @@ data:
 
 ---
 
-## üìä Evaluation and Benchmarks
+## 📊 Evaluation and Benchmarks
 
 ### Metrics
 
@@ -293,7 +293,7 @@ print(f"Gene Correlation: {metrics['gene_correlation']:.3f}")
 
 ---
 
-## üõ†Ô∏è Advanced Usage
+## 🛠️ Advanced Usage
 
 ### Custom Objective Functions
 
@@ -340,7 +340,7 @@ model = ScIDiffModel(
 
 ---
 
-## üß™ Testing
+## 🧪 Testing
 
 Run the test suite:
 
@@ -359,7 +359,7 @@ pytest --cov=scIDiff tests/
 
 ---
 
-## üìà Performance Tips
+## 📈 Performance Tips
 
 1. **Memory Optimization**:
    - Use gradient checkpointing for large models
@@ -378,18 +378,18 @@ pytest --cov=scIDiff tests/
 
 ---
 
-## üóìÔ∏è Roadmap
+## 🗓️ Roadmap
 
-- ‚úÖ **Core diffusion model** for scRNA-seq denoising
-- ‚úÖ **Perturbation conditioning** (CPA-style architecture)
-- ‚úÖ **Inverse design** from phenotype-level targets
-- üöß **Multi-modal integration** (ATAC-seq, protein data)
-- üöß **Trajectory modeling** with temporal dynamics
-- üî¨ **Benchmark suite** and paper submission
+- ✅ **Core diffusion model** for scRNA-seq denoising
+- ✅ **Perturbation conditioning** (CPA-style architecture)
+- ✅ **Inverse design** from phenotype-level targets
+- 🚧 **Multi-modal integration** (ATAC-seq, protein data)
+- 🚧 **Trajectory modeling** with temporal dynamics
+- 🔬 **Benchmark suite** and paper submission
 
 ---
 
-## üìö References
+## 📚 References
 
 * Lotfollahi et al. *scGen: Modeling single-cell perturbation response*, Nat. Methods (2019)
 * Hetzel et al. *CPA: Compositional Perturbation Autoencoder*, bioRxiv (2021)
@@ -398,7 +398,7 @@ pytest --cov=scIDiff tests/
 
 ---
 
-## ü§ù Contributing
+## 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
@@ -427,13 +427,13 @@ pytest tests/
 
 ---
 
-## üìÑ License
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## üìû Contact
+## 📞 Contact
 
 - **Issues**: Please use GitHub Issues for bug reports and feature requests
 - **Discussions**: Use GitHub Discussions for questions and general discussion
@@ -441,7 +441,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## üôè Acknowledgments
+## 🙏 Acknowledgments
 
 - The single-cell genomics community for foundational methods
 - The diffusion models community for theoretical advances
@@ -449,7 +449,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-*Built with ‚ù§Ô∏è for the single-cell biology community*
+*Built with ❤️ for the single-cell biology community*
 
-
-<img width="462" height="642" alt="image" src="https://github.com/user-attachments/assets/2c68a173-2359-471d-8848-25c8b6b0869c" />
