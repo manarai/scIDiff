@@ -1,350 +1,343 @@
 """
-Noise Scheduler for Diffusion Process
+Score Network for Single-Cell Diffusion Models
 
-This module implements various noise scheduling strategies for the forward
-diffusion process, including linear, cosine, and custom biological schedules.
+This module implements the neural network architecture that learns to predict
+the score function (gradient of log probability) for the diffusion process.
 """
 
 import torch
 import torch.nn as nn
-import numpy as np
-from typing import Optional, Union
+import torch.nn.functional as F
+from typing import Optional
 import math
 
 
-class NoiseScheduler:
+class TimeEmbedding(nn.Module):
     """
-    Noise scheduler for the forward diffusion process
-    
-    Supports different scheduling strategies:
-    - Linear: Linear interpolation between beta_start and beta_end
-    - Cosine: Cosine schedule from Nichol & Dhariwal (2021)
-    - Sigmoid: Sigmoid schedule for smoother transitions
-    - Custom: Custom schedule for biological data
+    Sinusoidal time embedding for diffusion timesteps
     """
-    
-    def __init__(
-        self,
-        num_timesteps: int = 1000,
-        beta_start: float = 1e-4,
-        beta_end: float = 0.02,
-        schedule_type: str = 'linear',
-        s: float = 0.008  # For cosine schedule
-    ):
-        self.num_timesteps = num_timesteps
-        self.beta_start = beta_start
-        self.beta_end = beta_end
-        self.schedule_type = schedule_type
-        self.s = s
+    def __init__(self, dim: int):
+        super().__init__()
+        self.dim = dim
         
-        # Compute noise schedule
-        if schedule_type == 'linear':
-            self.betas = self._linear_schedule()
-        elif schedule_type == 'cosine':
-            self.betas = self._cosine_schedule()
-        elif schedule_type == 'sigmoid':
-            self.betas = self._sigmoid_schedule()
-        elif schedule_type == 'biological':
-            self.betas = self._biological_schedule()
+    def forward(self, t: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            t (torch.Tensor): Timesteps [batch_size]
+        Returns:
+            torch.Tensor: Time embeddings [batch_size, dim]
+        """
+        device = t.device
+        half_dim = self.dim // 2
+        embeddings = math.log(10000) / (half_dim - 1)
+        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
+        embeddings = t[:, None] * embeddings[None, :]
+        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+        return embeddings
+
+
+class ResidualBlock(nn.Module):
+    """
+    Residual block with time and conditioning embeddings
+    """
+    def __init__(
+        self, 
+        dim: int, 
+        time_dim: int, 
+        conditioning_dim: Optional[int] = None,
+        dropout: float = 0.1,
+        activation: str = 'swish'
+    ):
+        super().__init__()
+        
+        self.time_mlp = nn.Sequential(
+            nn.Linear(time_dim, dim),
+            self._get_activation(activation)
+        )
+        
+        self.conditioning_mlp = None
+        if conditioning_dim is not None:
+            self.conditioning_mlp = nn.Sequential(
+                nn.Linear(conditioning_dim, dim),
+                self._get_activation(activation)
+            )
+        
+        self.block1 = nn.Sequential(
+            nn.LayerNorm(dim),
+            self._get_activation(activation),
+            nn.Linear(dim, dim),
+            nn.Dropout(dropout)
+        )
+        
+        self.block2 = nn.Sequential(
+            nn.LayerNorm(dim),
+            self._get_activation(activation),
+            nn.Linear(dim, dim),
+            nn.Dropout(dropout)
+        )
+        
+    def _get_activation(self, activation: str) -> nn.Module:
+        """Get activation function"""
+        if activation == 'relu':
+            return nn.ReLU()
+        elif activation == 'gelu':
+            return nn.GELU()
+        elif activation == 'swish':
+            return nn.SiLU()
         else:
-            raise ValueError(f"Unknown schedule type: {schedule_type}")
-        
-        # Compute derived quantities
-        self.alphas = 1.0 - self.betas
-        self.alpha_bar = torch.cumprod(self.alphas, dim=0)
-        self.alpha_bar_prev = torch.cat([torch.tensor([1.0]), self.alpha_bar[:-1]])
-        
-        # For sampling
-        self.sqrt_alpha_bar = torch.sqrt(self.alpha_bar)
-        self.sqrt_one_minus_alpha_bar = torch.sqrt(1.0 - self.alpha_bar)
-        self.sqrt_recip_alpha_bar = torch.sqrt(1.0 / self.alpha_bar)
-        self.sqrt_recipm1_alpha_bar = torch.sqrt(1.0 / self.alpha_bar - 1)
-        
-        # For DDIM sampling
-        self.posterior_variance = self.betas * (1.0 - self.alpha_bar_prev) / (1.0 - self.alpha_bar)
-        self.posterior_log_variance_clipped = torch.log(
-            torch.cat([self.posterior_variance[1:2], self.posterior_variance[1:]])
-        )
-        self.posterior_mean_coef1 = (
-            self.betas * torch.sqrt(self.alpha_bar_prev) / (1.0 - self.alpha_bar)
-        )
-        self.posterior_mean_coef2 = (
-            (1.0 - self.alpha_bar_prev) * torch.sqrt(self.alphas) / (1.0 - self.alpha_bar)
-        )
-        
-    def _linear_schedule(self) -> torch.Tensor:
-        """Linear beta schedule"""
-        return torch.linspace(self.beta_start, self.beta_end, self.num_timesteps)
+            raise ValueError(f"Unknown activation: {activation}")
     
-    def _cosine_schedule(self) -> torch.Tensor:
-        """Cosine beta schedule from Nichol & Dhariwal (2021)"""
-        timesteps = torch.arange(self.num_timesteps + 1, dtype=torch.float32) / self.num_timesteps
-        alphas_cumprod = torch.cos((timesteps + self.s) / (1 + self.s) * math.pi * 0.5) ** 2
-        alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
-        betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
-        return torch.clip(betas, 0, 0.999)
-    
-    def _sigmoid_schedule(self) -> torch.Tensor:
-        """Sigmoid beta schedule for smoother transitions"""
-        timesteps = torch.arange(self.num_timesteps, dtype=torch.float32)
-        # Sigmoid function centered at middle of schedule
-        sigmoid_input = (timesteps - self.num_timesteps / 2) / (self.num_timesteps / 10)
-        sigmoid_output = torch.sigmoid(sigmoid_input)
-        # Scale to beta range
-        betas = self.beta_start + (self.beta_end - self.beta_start) * sigmoid_output
-        return betas
-    
-    def _biological_schedule(self) -> torch.Tensor:
-        """
-        Custom schedule designed for biological data
-        
-        This schedule is designed to:
-        1. Start with very small noise to preserve biological structure
-        2. Gradually increase noise in the middle
-        3. End with high noise for complete randomization
-        """
-        timesteps = torch.arange(self.num_timesteps, dtype=torch.float32) / self.num_timesteps
-        
-        # Biological-inspired schedule: slow start, fast middle, slow end
-        # This preserves biological structure early and late in the process
-        biological_curve = 0.5 * (1 + torch.sin(2 * math.pi * timesteps - math.pi / 2))
-        
-        # Apply exponential weighting to emphasize the middle
-        exp_weight = torch.exp(-4 * (timesteps - 0.5) ** 2)
-        weighted_curve = biological_curve * exp_weight + timesteps * (1 - exp_weight)
-        
-        # Scale to beta range
-        betas = self.beta_start + (self.beta_end - self.beta_start) * weighted_curve
-        
-        return betas
-    
-    def add_noise(
-        self,
-        original_samples: torch.Tensor,
-        noise: torch.Tensor,
-        timesteps: torch.Tensor
+    def forward(
+        self, 
+        x: torch.Tensor, 
+        time_emb: torch.Tensor,
+        cond_emb: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         """
-        Add noise to original samples according to the noise schedule
-        
         Args:
-            original_samples (torch.Tensor): Original clean samples
-            noise (torch.Tensor): Noise to add
-            timesteps (torch.Tensor): Timesteps for each sample
-            
-        Returns:
-            torch.Tensor: Noisy samples
+            x (torch.Tensor): Input features [batch_size, dim]
+            time_emb (torch.Tensor): Time embeddings [batch_size, time_dim]
+            cond_emb (torch.Tensor, optional): Conditioning embeddings [batch_size, conditioning_dim]
         """
-        sqrt_alpha_bar = self.sqrt_alpha_bar[timesteps].view(-1, 1)
-        sqrt_one_minus_alpha_bar = self.sqrt_one_minus_alpha_bar[timesteps].view(-1, 1)
+        h = x
         
-        noisy_samples = sqrt_alpha_bar * original_samples + sqrt_one_minus_alpha_bar * noise
-        return noisy_samples
-    
-    def get_velocity(
-        self,
-        sample: torch.Tensor,
-        noise: torch.Tensor,
-        timesteps: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Get velocity for v-parameterization
+        # Add time embedding
+        h = h + self.time_mlp(time_emb)
         
-        Args:
-            sample (torch.Tensor): Clean samples
-            noise (torch.Tensor): Noise
-            timesteps (torch.Tensor): Timesteps
-            
-        Returns:
-            torch.Tensor: Velocity
-        """
-        sqrt_alpha_bar = self.sqrt_alpha_bar[timesteps].view(-1, 1)
-        sqrt_one_minus_alpha_bar = self.sqrt_one_minus_alpha_bar[timesteps].view(-1, 1)
+        # Add conditioning embedding if provided
+        if cond_emb is not None and self.conditioning_mlp is not None:
+            h = h + self.conditioning_mlp(cond_emb)
         
-        velocity = sqrt_alpha_bar * noise - sqrt_one_minus_alpha_bar * sample
-        return velocity
-    
-    def step(
-        self,
-        model_output: torch.Tensor,
-        timestep: int,
-        sample: torch.Tensor,
-        eta: float = 0.0,
-        use_clipped_model_output: bool = False,
-        generator: Optional[torch.Generator] = None
-    ) -> torch.Tensor:
-        """
-        Predict the sample at the previous timestep using DDIM/DDPM
+        # First residual block
+        h = self.block1(h) + h
         
-        Args:
-            model_output (torch.Tensor): Direct output from learned diffusion model
-            timestep (int): Current discrete timestep in the diffusion chain
-            sample (torch.Tensor): Current instance of sample being created by diffusion process
-            eta (float): Weight of noise for added noise in diffusion step
-            use_clipped_model_output (bool): Whether to clip predicted original sample
-            generator (torch.Generator): Random number generator
-            
-        Returns:
-            torch.Tensor: Sample at previous timestep
-        """
-        prev_timestep = timestep - 1
+        # Second residual block  
+        h = self.block2(h) + h
         
-        # Compute alphas, betas
-        alpha_prod_t = self.alpha_bar[timestep]
-        alpha_prod_t_prev = self.alpha_bar[prev_timestep] if prev_timestep >= 0 else torch.tensor(1.0)
-        beta_prod_t = 1 - alpha_prod_t
-        
-        # Compute predicted original sample from predicted noise
-        pred_original_sample = (sample - beta_prod_t ** 0.5 * model_output) / alpha_prod_t ** 0.5
-        
-        if use_clipped_model_output:
-            pred_original_sample = torch.clamp(pred_original_sample, -1, 1)
-        
-        # Compute coefficients for pred_original_sample and current sample
-        pred_original_sample_coeff = (alpha_prod_t_prev ** 0.5 * self.betas[timestep]) / beta_prod_t
-        current_sample_coeff = self.alphas[timestep] ** 0.5 * (1 - alpha_prod_t_prev) / beta_prod_t
-        
-        # Compute predicted previous sample mean
-        pred_prev_sample = pred_original_sample_coeff * pred_original_sample + current_sample_coeff * sample
-        
-        # Add noise
-        variance = 0
-        if eta > 0:
-            variance = self._get_variance(timestep, prev_timestep) * eta ** 2
-            
-        if variance > 0:
-            device = model_output.device
-            if generator is not None:
-                noise = torch.randn(model_output.shape, generator=generator, device=device)
-            else:
-                noise = torch.randn(model_output.shape, device=device)
-            pred_prev_sample = pred_prev_sample + (variance ** 0.5) * noise
-        
-        return pred_prev_sample
-    
-    def _get_variance(self, timestep: int, prev_timestep: int) -> float:
-        """Get variance for DDIM sampling"""
-        alpha_prod_t = self.alpha_bar[timestep]
-        alpha_prod_t_prev = self.alpha_bar[prev_timestep] if prev_timestep >= 0 else torch.tensor(1.0)
-        beta_prod_t = 1 - alpha_prod_t
-        beta_prod_t_prev = 1 - alpha_prod_t_prev
-        
-        variance = (beta_prod_t_prev / beta_prod_t) * (1 - alpha_prod_t / alpha_prod_t_prev)
-        return variance
-    
-    def to(self, device: torch.device):
-        """Move scheduler tensors to device"""
-        self.betas = self.betas.to(device)
-        self.alphas = self.alphas.to(device)
-        self.alpha_bar = self.alpha_bar.to(device)
-        self.alpha_bar_prev = self.alpha_bar_prev.to(device)
-        self.sqrt_alpha_bar = self.sqrt_alpha_bar.to(device)
-        self.sqrt_one_minus_alpha_bar = self.sqrt_one_minus_alpha_bar.to(device)
-        self.sqrt_recip_alpha_bar = self.sqrt_recip_alpha_bar.to(device)
-        self.sqrt_recipm1_alpha_bar = self.sqrt_recipm1_alpha_bar.to(device)
-        self.posterior_variance = self.posterior_variance.to(device)
-        self.posterior_log_variance_clipped = self.posterior_log_variance_clipped.to(device)
-        self.posterior_mean_coef1 = self.posterior_mean_coef1.to(device)
-        self.posterior_mean_coef2 = self.posterior_mean_coef2.to(device)
-        return self
+        return h
 
 
-class AdaptiveNoiseScheduler(NoiseScheduler):
+class AttentionBlock(nn.Module):
     """
-    Adaptive noise scheduler that learns optimal noise levels
+    Multi-head attention block for capturing gene-gene interactions
+    """
+    def __init__(self, dim: int, num_heads: int = 8, dropout: float = 0.1):
+        super().__init__()
+        
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+        self.scale = self.head_dim ** -0.5
+        
+        self.norm = nn.LayerNorm(dim)
+        self.to_qkv = nn.Linear(dim, dim * 3, bias=False)
+        self.to_out = nn.Sequential(
+            nn.Linear(dim, dim),
+            nn.Dropout(dropout)
+        )
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x (torch.Tensor): Input features [batch_size, dim]
+        """
+        batch_size, dim = x.shape
+        
+        # Normalize input
+        x_norm = self.norm(x)
+        
+        # Generate Q, K, V
+        qkv = self.to_qkv(x_norm).chunk(3, dim=-1)
+        q, k, v = map(lambda t: t.view(batch_size, self.num_heads, self.head_dim), qkv)
+        
+        # Attention
+        dots = torch.einsum('bhd,bhd->bh', q, k) * self.scale
+        attn = F.softmax(dots, dim=-1)
+        
+        out = torch.einsum('bh,bhd->bhd', attn, v)
+        out = out.view(batch_size, dim)
+        
+        return self.to_out(out) + x
+
+
+class ScoreNetwork(nn.Module):
+    """
+    Neural network for predicting the score function in diffusion models
+    
+    This network takes noisy gene expression data, timestep, and conditioning
+    information to predict the noise that was added.
     """
     
     def __init__(
         self,
-        num_timesteps: int = 1000,
-        beta_start: float = 1e-4,
-        beta_end: float = 0.02,
-        learnable: bool = True
+        input_dim: int,
+        hidden_dim: int = 512,
+        num_layers: int = 6,
+        conditioning_dim: Optional[int] = None,
+        dropout: float = 0.1,
+        activation: str = 'swish',
+        use_attention: bool = True,
+        num_attention_heads: int = 8
     ):
-        super().__init__(num_timesteps, beta_start, beta_end, 'linear')
+        super().__init__()
         
-        if learnable:
-            # Make betas learnable parameters
-            self.betas = nn.Parameter(self.betas)
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.num_layers = num_layers
+        self.use_attention = use_attention
         
-    def update_schedule(self):
-        """Update derived quantities after beta updates"""
-        self.alphas = 1.0 - self.betas
-        self.alpha_bar = torch.cumprod(self.alphas, dim=0)
-        self.alpha_bar_prev = torch.cat([torch.tensor([1.0], device=self.betas.device), self.alpha_bar[:-1]])
+        # Time embedding
+        time_dim = hidden_dim
+        self.time_embedding = TimeEmbedding(time_dim)
         
-        # Update all derived quantities
-        self.sqrt_alpha_bar = torch.sqrt(self.alpha_bar)
-        self.sqrt_one_minus_alpha_bar = torch.sqrt(1.0 - self.alpha_bar)
-        self.sqrt_recip_alpha_bar = torch.sqrt(1.0 / self.alpha_bar)
-        self.sqrt_recipm1_alpha_bar = torch.sqrt(1.0 / self.alpha_bar - 1)
+        # Input projection
+        self.input_proj = nn.Linear(input_dim, hidden_dim)
         
-        self.posterior_variance = self.betas * (1.0 - self.alpha_bar_prev) / (1.0 - self.alpha_bar)
-        self.posterior_log_variance_clipped = torch.log(
-            torch.cat([self.posterior_variance[1:2], self.posterior_variance[1:]])
+        # Residual blocks
+        self.blocks = nn.ModuleList([
+            ResidualBlock(
+                dim=hidden_dim,
+                time_dim=time_dim,
+                conditioning_dim=conditioning_dim,
+                dropout=dropout,
+                activation=activation
+            )
+            for _ in range(num_layers)
+        ])
+        
+        # Attention blocks (every other layer)
+        self.attention_blocks = nn.ModuleList()
+        if use_attention:
+            for i in range(num_layers):
+                if i % 2 == 1:  # Add attention every other layer
+                    self.attention_blocks.append(
+                        AttentionBlock(
+                            dim=hidden_dim,
+                            num_heads=num_attention_heads,
+                            dropout=dropout
+                        )
+                    )
+                else:
+                    self.attention_blocks.append(nn.Identity())
+        
+        # Output projection
+        self.output_proj = nn.Sequential(
+            nn.LayerNorm(hidden_dim),
+            self._get_activation(activation),
+            nn.Linear(hidden_dim, input_dim)
         )
-        self.posterior_mean_coef1 = (
-            self.betas * torch.sqrt(self.alpha_bar_prev) / (1.0 - self.alpha_bar)
-        )
-        self.posterior_mean_coef2 = (
-            (1.0 - self.alpha_bar_prev) * torch.sqrt(self.alphas) / (1.0 - self.alpha_bar)
-        )
-
-
-class BiologicalNoiseScheduler(NoiseScheduler):
-    """
-    Specialized noise scheduler for biological data that accounts for:
-    - Gene expression sparsity
-    - Biological noise patterns
-    - Cell type specific noise levels
-    """
+        
+        # Initialize weights
+        self._init_weights()
+        
+    def _get_activation(self, activation: str) -> nn.Module:
+        """Get activation function"""
+        if activation == 'relu':
+            return nn.ReLU()
+        elif activation == 'gelu':
+            return nn.GELU()
+        elif activation == 'swish':
+            return nn.SiLU()
+        else:
+            raise ValueError(f"Unknown activation: {activation}")
     
-    def __init__(
+    def _init_weights(self):
+        """Initialize network weights"""
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.LayerNorm):
+                nn.init.ones_(module.weight)
+                nn.init.zeros_(module.bias)
+    
+    def forward(
         self,
-        num_timesteps: int = 1000,
-        beta_start: float = 1e-4,
-        beta_end: float = 0.02,
-        sparsity_factor: float = 0.8,
-        gene_specific_noise: bool = True
-    ):
-        super().__init__(num_timesteps, beta_start, beta_end, 'biological')
-        
-        self.sparsity_factor = sparsity_factor
-        self.gene_specific_noise = gene_specific_noise
-        
-    def add_biological_noise(
-        self,
-        original_samples: torch.Tensor,
-        timesteps: torch.Tensor,
-        gene_importance: Optional[torch.Tensor] = None
+        x: torch.Tensor,
+        t: torch.Tensor,
+        conditioning: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         """
-        Add biologically-informed noise that respects gene expression patterns
+        Forward pass through the score network
         
         Args:
-            original_samples (torch.Tensor): Original clean samples
-            timesteps (torch.Tensor): Timesteps for each sample
-            gene_importance (torch.Tensor, optional): Gene importance weights
+            x (torch.Tensor): Noisy gene expression data [batch_size, input_dim]
+            t (torch.Tensor): Timesteps [batch_size]
+            conditioning (torch.Tensor, optional): Conditioning embeddings [batch_size, conditioning_dim]
             
         Returns:
-            torch.Tensor: Noisy samples with biological constraints
+            torch.Tensor: Predicted score/noise [batch_size, input_dim]
         """
-        # Standard noise
-        noise = torch.randn_like(original_samples)
+        # Time embedding
+        time_emb = self.time_embedding(t)
         
-        # Apply sparsity mask (preserve zeros in original data)
-        sparsity_mask = (original_samples != 0).float()
-        noise = noise * sparsity_mask
+        # Input projection
+        h = self.input_proj(x)
         
-        # Apply gene-specific noise if provided
-        if gene_importance is not None and self.gene_specific_noise:
-            noise = noise * gene_importance.unsqueeze(0)
+        # Pass through residual and attention blocks
+        for i, (res_block, attn_block) in enumerate(zip(self.blocks, self.attention_blocks)):
+            h = res_block(h, time_emb, conditioning)
+            if self.use_attention:
+                h = attn_block(h)
         
-        # Add noise according to schedule
-        noisy_samples = self.add_noise(original_samples, noise, timesteps)
+        # Output projection
+        output = self.output_proj(h)
         
-        # Ensure non-negative values (gene expression can't be negative)
-        noisy_samples = torch.clamp(noisy_samples, min=0)
+        return output
+
+
+class GeneAttentionNetwork(nn.Module):
+    """
+    Specialized attention network for modeling gene-gene interactions
+    """
+    def __init__(
+        self,
+        gene_dim: int,
+        hidden_dim: int = 256,
+        num_heads: int = 8,
+        num_layers: int = 3,
+        dropout: float = 0.1
+    ):
+        super().__init__()
         
-        return noisy_samples
+        self.gene_embedding = nn.Linear(1, hidden_dim)
+        
+        self.transformer_layers = nn.ModuleList([
+            nn.TransformerEncoderLayer(
+                d_model=hidden_dim,
+                nhead=num_heads,
+                dim_feedforward=hidden_dim * 4,
+                dropout=dropout,
+                activation='gelu',
+                batch_first=True
+            )
+            for _ in range(num_layers)
+        ])
+        
+        self.output_proj = nn.Linear(hidden_dim, 1)
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x (torch.Tensor): Gene expression data [batch_size, gene_dim]
+        Returns:
+            torch.Tensor: Processed gene expression [batch_size, gene_dim]
+        """
+        batch_size, gene_dim = x.shape
+        
+        # Reshape for sequence processing: [batch_size, gene_dim, 1]
+        x = x.unsqueeze(-1)
+        
+        # Gene embeddings
+        h = self.gene_embedding(x)  # [batch_size, gene_dim, hidden_dim]
+        
+        # Transformer layers
+        for layer in self.transformer_layers:
+            h = layer(h)
+        
+        # Output projection
+        output = self.output_proj(h).squeeze(-1)  # [batch_size, gene_dim]
+        
+        return output
+
 
