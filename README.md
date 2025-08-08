@@ -61,7 +61,7 @@ Single-cell technologies allow high-resolution interrogation of cellular respons
 
 ```bash
 # Create conda env
-conda create -n scidiff python=3.11
+conda create -n scidiff python=3.10
 conda activate scidiff
 
 # Clone the repository
