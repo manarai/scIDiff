@@ -12,18 +12,27 @@ from typing import Dict, Optional, List, Union
 import numpy as np
 
 
+class SinusoidalEmbedding(nn.Module):
+    """Sinusoidal positional embedding for continuous values"""
+    
+    def __init__(self, dim: int, max_period: float = 10000.0):
+        super().__init__()
+        self.dim = dim
+        self.max_period = max_period
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        device = x.device
+        half_dim = self.dim // 2
+        
+        embeddings = np.log(self.max_period) / (half_dim - 1)
+        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
+        embeddings = x[:, None] * embeddings[None, :]
+        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+        
+        return embeddings
+
+
 class ConditioningModule(nn.Module):
-    """
-    Module for processing and embedding biological conditioning information
-    
-    Supports various conditioning types:
-    - Cell type (categorical)
-    - Drug treatment (categorical + continuous dose)
-    - Perturbation (CRISPR, genetic, etc.)
-    - Time point (continuous)
-    - Batch effects (categorical)
-    """
-    
     def __init__(
         self,
         conditioning_dim: int = 128,
@@ -39,7 +48,7 @@ class ConditioningModule(nn.Module):
         self.conditioning_dim = conditioning_dim
         self.max_time = max_time
         
-        # Embedding layers for categorical variables
+        # Embeddings for categorical variables
         self.cell_type_embedding = None
         if cell_type_vocab_size is not None:
             self.cell_type_embedding = nn.Embedding(cell_type_vocab_size, conditioning_dim // 4)
@@ -59,33 +68,31 @@ class ConditioningModule(nn.Module):
         # Time embedding (sinusoidal)
         self.time_embedding = SinusoidalEmbedding(conditioning_dim // 4)
         
-        # Dose embedding (for continuous drug doses)
+        # Dose embedding (continuous)
         self.dose_mlp = nn.Sequential(
             nn.Linear(1, conditioning_dim // 8),
             nn.ReLU(),
             nn.Linear(conditioning_dim // 8, conditioning_dim // 8)
         )
         
-        # Fusion network to combine all conditioning information
         fusion_input_dim = self._compute_fusion_input_dim()
         self.fusion_network = nn.Sequential(
             nn.Linear(fusion_input_dim, conditioning_dim * 2),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(conditioning_dim * 2, conditioning_dim),
+            nn.Linear(conditioning_dim * 1, conditioning_dim),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(conditioning_dim, conditioning_dim)
         )
         
-        # Time-dependent modulation
+        # **FIXED**: input dim changed from conditioning_dim to conditioning_dim // 4
         self.time_modulation = nn.Sequential(
-            nn.Linear(conditioning_dim, conditioning_dim),
+            nn.Linear(conditioning_dim // 4, conditioning_dim),
             nn.Tanh()
         )
         
     def _compute_fusion_input_dim(self) -> int:
-        """Compute the input dimension for the fusion network"""
         dim = 0
         
         if self.cell_type_embedding is not None:
@@ -100,114 +107,59 @@ class ConditioningModule(nn.Module):
         dim += self.conditioning_dim // 4  # time embedding
         dim += self.conditioning_dim // 8  # dose embedding
         
-        return max(dim, self.conditioning_dim)  # Ensure minimum size
+        return max(dim, self.conditioning_dim)
     
-    def forward(
-        self, 
-        conditioning: Dict[str, torch.Tensor],
-        diffusion_time: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Process conditioning information
-        
-        Args:
-            conditioning (Dict[str, torch.Tensor]): Dictionary containing:
-                - 'cell_type': Cell type indices [batch_size]
-                - 'drug': Drug indices [batch_size]
-                - 'dose': Drug doses [batch_size]
-                - 'perturbation': Perturbation indices [batch_size]
-                - 'time': Biological time points [batch_size]
-                - 'batch': Batch indices [batch_size]
-            diffusion_time (torch.Tensor): Diffusion timesteps [batch_size]
-            
-        Returns:
-            torch.Tensor: Conditioning embeddings [batch_size, conditioning_dim]
-        """
+    def forward(self, conditioning: Dict[str, torch.Tensor], diffusion_time: torch.Tensor) -> torch.Tensor:
         batch_size = diffusion_time.shape[0]
         device = diffusion_time.device
         
         embeddings = []
         
-        # Cell type embedding
         if 'cell_type' in conditioning and self.cell_type_embedding is not None:
-            cell_type_emb = self.cell_type_embedding(conditioning['cell_type'])
-            embeddings.append(cell_type_emb)
+            embeddings.append(self.cell_type_embedding(conditioning['cell_type']))
         else:
             embeddings.append(torch.zeros(batch_size, self.conditioning_dim // 4, device=device))
         
-        # Drug embedding
         if 'drug' in conditioning and self.drug_embedding is not None:
-            drug_emb = self.drug_embedding(conditioning['drug'])
-            embeddings.append(drug_emb)
+            embeddings.append(self.drug_embedding(conditioning['drug']))
         else:
             embeddings.append(torch.zeros(batch_size, self.conditioning_dim // 4, device=device))
         
-        # Perturbation embedding
         if 'perturbation' in conditioning and self.perturbation_embedding is not None:
-            pert_emb = self.perturbation_embedding(conditioning['perturbation'])
-            embeddings.append(pert_emb)
+            embeddings.append(self.perturbation_embedding(conditioning['perturbation']))
         else:
             embeddings.append(torch.zeros(batch_size, self.conditioning_dim // 4, device=device))
         
-        # Batch embedding
         if 'batch' in conditioning and self.batch_embedding is not None:
-            batch_emb = self.batch_embedding(conditioning['batch'])
-            embeddings.append(batch_emb)
+            embeddings.append(self.batch_embedding(conditioning['batch']))
         else:
             embeddings.append(torch.zeros(batch_size, self.conditioning_dim // 8, device=device))
         
-        # Time embedding (biological time, not diffusion time)
         if 'time' in conditioning:
-            time_emb = self.time_embedding(conditioning['time'])
-            embeddings.append(time_emb)
+            embeddings.append(self.time_embedding(conditioning['time']))
         else:
             embeddings.append(torch.zeros(batch_size, self.conditioning_dim // 4, device=device))
         
-        # Dose embedding
         if 'dose' in conditioning:
-            dose_emb = self.dose_mlp(conditioning['dose'].unsqueeze(-1))
-            embeddings.append(dose_emb)
+            embeddings.append(self.dose_mlp(conditioning['dose'].unsqueeze(-1)))
         else:
             embeddings.append(torch.zeros(batch_size, self.conditioning_dim // 8, device=device))
         
-        # Concatenate all embeddings
-        combined_emb = torch.cat(embeddings, dim=-1)
-        
-        # Ensure correct dimension
+        #combined_emb = torch.cat(embeddings, dim=-1)
+        combined_emb = torch.cat([cell_emb, perturb_emb, time_emb, dose_emb], dim=-1)
+
         if combined_emb.shape[-1] < self.conditioning_dim:
             padding = torch.zeros(batch_size, self.conditioning_dim - combined_emb.shape[-1], device=device)
             combined_emb = torch.cat([combined_emb, padding], dim=-1)
         
-        # Fusion network
         fused_emb = self.fusion_network(combined_emb)
         
-        # Time-dependent modulation based on diffusion timestep
         diffusion_time_emb = self.time_embedding(diffusion_time.float())
         time_mod = self.time_modulation(diffusion_time_emb)
         
-        # Apply time modulation
         final_emb = fused_emb * (1 + time_mod)
         
         return final_emb
-
-
-class SinusoidalEmbedding(nn.Module):
-    """Sinusoidal positional embedding for continuous values"""
-    
-    def __init__(self, dim: int, max_period: float = 10000.0):
-        super().__init__()
-        self.dim = dim
-        self.max_period = max_period
-        
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        device = x.device
-        half_dim = self.dim // 2
-        
-        freq = np.log(self.max_period) / (half_dim - 1)
-        freq = torch.exp(torch.arange(half_dim, device=device) * -freq)
-        args = x[:, None] * freq[None, :]
-        embeddings = torch.cat([args.sin(), args.cos()], dim=-1)
-        return embeddings
 
 
 class PerturbationEncoder(nn.Module):
