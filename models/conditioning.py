@@ -200,20 +200,13 @@ class SinusoidalEmbedding(nn.Module):
         self.max_period = max_period
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x (torch.Tensor): Input values [batch_size]
-        Returns:
-            torch.Tensor: Sinusoidal embeddings [batch_size, dim]
-        """
         device = x.device
         half_dim = self.dim // 2
         
-        embeddings = np.log(self.max_period) / (half_dim - 1)
-        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
-        embeddings = x[:, None] * embeddings[None, :]
-        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
-        
+        freq = np.log(self.max_period) / (half_dim - 1)
+        freq = torch.exp(torch.arange(half_dim, device=device) * -freq)
+        args = x[:, None] * freq[None, :]
+        embeddings = torch.cat([args.sin(), args.cos()], dim=-1)
         return embeddings
 
 
