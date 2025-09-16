@@ -51,6 +51,11 @@ umap-learn>=0.5.0
 # Biological data
 biomart>=0.9.2
 mygene>=3.2.0
+biomart>=0.9.2
+mygene>=3.2.0
+dynamo-release>=1.3.0   # For vector field inference (RNA velocity)
+gseapy>=0.10.8          # For pathway enrichment / prior construction
+networkx>=2.8           # For pathway/graph Laplacian priors
 
 # Performance
 numba>=0.56.0
